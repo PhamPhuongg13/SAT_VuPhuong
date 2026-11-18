@@ -40,7 +40,6 @@ def build_L(var_info, nodes):
 
     return L
 
-
 # C1: Exactly-One Constraint
 def encode_C1(L, next_var):
     clauses = []
@@ -93,6 +92,22 @@ def encode_dependency(L, var_info, edges, latency, II):
 
     return clauses
 
+# Connectivity Constraint
+def encode_connectivity(L, var_info, edges, connections):
+    clauses = []
+
+    for u, v, d in edges:
+        for var1 in L[u]:
+            _, pe1, t1, _ = var_info[var1]
+
+            for var2 in L[v]:
+                _, pe2, t2, _ = var_info[var2]
+
+                if pe2 not in connections[pe1]:
+                    clauses.append([-var1, -var2])
+
+    return clauses
+
 
 def solve_mapping(clauses, var_info):
     with Solver(name="glucose3", bootstrap_with=clauses) as solver:
@@ -127,15 +142,9 @@ if __name__ == "__main__":
     # ID -> (node, PE, cycle, iteration)
     var_info = {
         1: ("a", 0, 1, 0),
-        2: ("a", 1, 1, 0),
-        3: ("a", 0, 2, 0),
-        4: ("b", 0, 4, 0),
-        5: ("b", 1, 2, 0),
-        6: ("c", 0, 7, 0),
+        2: ("b", 1, 2, 0),
+        3: ("c", 0, 8, 0)
     }
-
-    # sinh L(các ứng viên của từng node)
-    L = build_L(var_info, nodes)
 
     # (node nguồn, node đích, iteration distance)
     edges = [
@@ -149,6 +158,17 @@ if __name__ == "__main__":
         "c": 1
     }
 
+    # sinh L(các ứng viên của từng node)
+    L = build_L(var_info, nodes)
+        
+    # Kiến trúc CGRA: PE0 <-> PE1 <-> PE2
+    connections = {
+        0: {0, 1},
+        1: {0, 1, 2},
+        2: {1, 2}
+    }
+
+
     next_var = max(var_info, default=0) + 1
 
     # C1: Exactly-One
@@ -158,12 +178,12 @@ if __name__ == "__main__":
     clauses_C2 = encode_C2(L, var_info, II, nodes)
 
     # Dependency
-    clauses_dep = encode_dependency(
-        L, var_info, edges, latency, II
-    )
+    clauses_dep = encode_dependency(L, var_info, edges, latency, II)
+
+    clauses_conn = encode_connectivity(L, var_info, edges, connections)
 
     # Ghép CNF
-    clauses = clauses_C1 + clauses_C2 + clauses_dep
+    clauses = clauses_C1 + clauses_C2 + clauses_dep + clauses_conn
 
     print("L:", L)
     print("C1 clauses:", len(clauses_C1))
